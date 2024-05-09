@@ -26,8 +26,8 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
-import static org.apache.kafka.common.utils.Utils.join;
 import static org.apache.kafka.tools.ToolsUtils.minus;
 
 public class ConsumerGroupCommandOptions extends CommandDefaultOptions {
@@ -206,16 +206,18 @@ public class ConsumerGroupCommandOptions extends CommandDefaultOptions {
 
     @SuppressWarnings({"CyclomaticComplexity", "NPathComplexity"})
     void checkArgs() {
+        CommandLineUtils.maybePrintHelpOrVersion(this, "This tool helps to list all consumer groups, describe a consumer group, delete consumer group info, or reset consumer group offsets.");
+
         CommandLineUtils.checkRequiredArgs(parser, options, bootstrapServerOpt);
 
         if (options.has(describeOpt)) {
             if (!options.has(groupOpt) && !options.has(allGroupsOpt))
                 CommandLineUtils.printUsageAndExit(parser,
-                    "Option " + describeOpt + " takes one of these options: " + join(allGroupSelectionScopeOpts, ", "));
+            "Option " + describeOpt + " takes one of these options: " + allConsumerGroupLevelOpts.stream().map(Object::toString).collect(Collectors.joining(", ")));
             List<OptionSpec<?>> mutuallyExclusiveOpts = Arrays.asList(membersOpt, offsetsOpt, stateOpt);
             if (mutuallyExclusiveOpts.stream().mapToInt(o -> options.has(o) ? 1 : 0).sum() > 1) {
                 CommandLineUtils.printUsageAndExit(parser,
-                    "Option " + describeOpt + " takes at most one of these options: " + join(mutuallyExclusiveOpts, ", "));
+                    "Option " + describeOpt + " takes at most one of these options: " + mutuallyExclusiveOpts.stream().map(Object::toString).collect(Collectors.joining(", ")));
             }
             if (options.has(stateOpt) && options.valueOf(stateOpt) != null)
                 CommandLineUtils.printUsageAndExit(parser,
@@ -228,7 +230,7 @@ public class ConsumerGroupCommandOptions extends CommandDefaultOptions {
         if (options.has(deleteOpt)) {
             if (!options.has(groupOpt) && !options.has(allGroupsOpt))
                 CommandLineUtils.printUsageAndExit(parser,
-                    "Option " + deleteOpt + " takes one of these options: " + join(allGroupSelectionScopeOpts, ", "));
+            "Option " + deleteOpt + " takes one of these options: " + allGroupSelectionScopeOpts.stream().map(Object::toString).collect(Collectors.joining(", ")));
             if (options.has(topicOpt))
                 CommandLineUtils.printUsageAndExit(parser, "The consumer does not support topic-specific offset " +
                     "deletion from a consumer group.");
@@ -237,7 +239,7 @@ public class ConsumerGroupCommandOptions extends CommandDefaultOptions {
         if (options.has(deleteOffsetsOpt)) {
             if (!options.has(groupOpt) || !options.has(topicOpt))
                 CommandLineUtils.printUsageAndExit(parser,
-                    "Option " + deleteOffsetsOpt + " takes the following options: " + join(allDeleteOffsetsOpts, ", "));
+            "Option " + deleteOffsetsOpt + " takes the following options: " + allGroupSelectionScopeOpts.stream().map(Object::toString).collect(Collectors.joining(", ")));
         }
 
         if (options.has(resetOffsetsOpt)) {
@@ -253,7 +255,7 @@ public class ConsumerGroupCommandOptions extends CommandDefaultOptions {
 
             if (!options.has(groupOpt) && !options.has(allGroupsOpt))
                 CommandLineUtils.printUsageAndExit(parser,
-                    "Option " + resetOffsetsOpt + " takes one of these options: " + join(allGroupSelectionScopeOpts, ", "));
+                    "Option " + resetOffsetsOpt + " takes one of these options: " + allGroupSelectionScopeOpts.stream().map(Object::toString).collect(Collectors.joining(", ")));
             CommandLineUtils.checkInvalidArgs(parser, options, resetToOffsetOpt, minus(allResetOffsetScenarioOpts, resetToOffsetOpt));
             CommandLineUtils.checkInvalidArgs(parser, options, resetToDatetimeOpt, minus(allResetOffsetScenarioOpts, resetToDatetimeOpt));
             CommandLineUtils.checkInvalidArgs(parser, options, resetByDurationOpt, minus(allResetOffsetScenarioOpts, resetByDurationOpt));

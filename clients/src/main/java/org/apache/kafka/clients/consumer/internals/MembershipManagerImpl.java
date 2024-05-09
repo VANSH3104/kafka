@@ -40,7 +40,6 @@ import org.apache.kafka.common.telemetry.internals.ClientTelemetryProvider;
 import org.apache.kafka.common.telemetry.internals.ClientTelemetryReporter;
 import org.apache.kafka.common.utils.LogContext;
 import org.apache.kafka.common.utils.Time;
-import org.apache.kafka.common.utils.Utils;
 import org.slf4j.Logger;
 
 import java.util.ArrayList;
@@ -961,7 +960,7 @@ public class MembershipManagerImpl implements MembershipManager {
         // best effort to commit the offsets in the case where the epoch might have changed while
         // the current reconciliation is in process. Note this is using the rebalance timeout as
         // it is the limit enforced by the broker to complete the reconciliation process.
-        commitResult = commitRequestManager.maybeAutoCommitSyncNow(getExpirationTimeForTimeout(rebalanceTimeoutMs));
+        commitResult = commitRequestManager.maybeAutoCommitSyncBeforeRevocation(getExpirationTimeForTimeout(rebalanceTimeoutMs));
 
         // Execute commit -> onPartitionsRevoked -> onPartitionsAssigned.
         commitResult.whenComplete((__, commitReqError) -> {
@@ -1181,7 +1180,7 @@ public class MembershipManagerImpl implements MembershipManager {
      * Visible for testing
      */
     CompletableFuture<Void> revokePartitions(Set<TopicPartition> revokedPartitions) {
-        log.info("Revoking previously assigned partitions {}", Utils.join(revokedPartitions, ", "));
+        log.info("Revoking previously assigned partitions {}", revokedPartitions.stream().map(TopicPartition::toString).collect(Collectors.joining(", ")));
 
         logPausedPartitionsBeingRevoked(revokedPartitions);
 
@@ -1377,7 +1376,7 @@ public class MembershipManagerImpl implements MembershipManager {
         Set<TopicPartition> revokePausedPartitions = subscriptions.pausedPartitions();
         revokePausedPartitions.retainAll(partitionsToRevoke);
         if (!revokePausedPartitions.isEmpty()) {
-            log.info("The pause flag in partitions [{}] will be removed due to revocation.", Utils.join(revokePausedPartitions, ", "));
+            log.info("The pause flag in partitions [{}] will be removed due to revocation.", revokePausedPartitions.stream().map(TopicPartition::toString).collect(Collectors.joining(", ")));
         }
     }
 

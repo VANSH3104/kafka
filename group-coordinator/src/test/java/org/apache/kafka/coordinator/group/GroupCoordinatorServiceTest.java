@@ -73,6 +73,7 @@ import org.apache.kafka.server.util.FutureUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -129,7 +130,8 @@ public class GroupCoordinatorServiceTest {
             10 * 5 * 1000,
             600000L,
             24 * 60 * 1000L,
-            5000
+            5000,
+            ConsumerGroupMigrationPolicy.DISABLED
         );
     }
 
@@ -370,7 +372,8 @@ public class GroupCoordinatorServiceTest {
         );
 
         JoinGroupRequestData request = new JoinGroupRequestData()
-            .setGroupId("foo");
+            .setGroupId("foo")
+            .setSessionTimeoutMs(1000);
 
         service.startup(() -> 1);
 
@@ -403,7 +406,8 @@ public class GroupCoordinatorServiceTest {
         );
 
         JoinGroupRequestData request = new JoinGroupRequestData()
-            .setGroupId("foo");
+            .setGroupId("foo")
+            .setSessionTimeoutMs(1000);
 
         service.startup(() -> 1);
 
@@ -495,6 +499,38 @@ public class GroupCoordinatorServiceTest {
         assertEquals(
             new JoinGroupResponseData()
                 .setErrorCode(Errors.COORDINATOR_NOT_AVAILABLE.code()),
+            future.get()
+        );
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {120 - 1, 10 * 5 * 1000 + 1})
+    public void testJoinGroupInvalidSessionTimeout(int sessionTimeoutMs) throws Exception {
+        CoordinatorRuntime<GroupCoordinatorShard, Record> runtime = mockRuntime();
+        GroupCoordinatorConfig config = createConfig();
+        GroupCoordinatorService service = new GroupCoordinatorService(
+            new LogContext(),
+            config,
+            runtime,
+            new GroupCoordinatorMetrics()
+        );
+        service.startup(() -> 1);
+
+        JoinGroupRequestData request = new GroupMetadataManagerTestContext.JoinGroupRequestBuilder()
+            .withGroupId("group-id")
+            .withMemberId(UNKNOWN_MEMBER_ID)
+            .withSessionTimeoutMs(sessionTimeoutMs)
+            .build();
+
+        CompletableFuture<JoinGroupResponseData> future = service.joinGroup(
+            requestContext(ApiKeys.JOIN_GROUP),
+            request,
+            BufferSupplier.NO_CACHING
+        );
+
+        assertEquals(
+            new JoinGroupResponseData()
+                .setErrorCode(Errors.INVALID_SESSION_TIMEOUT.code()),
             future.get()
         );
     }
@@ -1900,8 +1936,15 @@ public class GroupCoordinatorServiceTest {
         assertEquals(response, future.get());
     }
 
-    @Test
-    public void testCommitTransactionalOffsetsWithWrappedError() throws ExecutionException, InterruptedException {
+    @ParameterizedTest
+    @CsvSource({
+        "NOT_ENOUGH_REPLICAS, COORDINATOR_NOT_AVAILABLE",
+        "NETWORK_EXCEPTION, COORDINATOR_LOAD_IN_PROGRESS"
+    })
+    public void testCommitTransactionalOffsetsWithWrappedError(
+        Errors error,
+        Errors expectedError
+    ) throws ExecutionException, InterruptedException {
         CoordinatorRuntime<GroupCoordinatorShard, Record> runtime = mockRuntime();
         GroupCoordinatorService service = new GroupCoordinatorService(
             new LogContext(),
@@ -1929,7 +1972,7 @@ public class GroupCoordinatorServiceTest {
                 .setName("topic")
                 .setPartitions(Collections.singletonList(new TxnOffsetCommitResponseData.TxnOffsetCommitResponsePartition()
                     .setPartitionIndex(0)
-                    .setErrorCode(Errors.COORDINATOR_NOT_AVAILABLE.code())))));
+                    .setErrorCode(expectedError.code())))));
 
         when(runtime.scheduleTransactionalWriteOperation(
             ArgumentMatchers.eq("txn-commit-offset"),
@@ -1940,7 +1983,7 @@ public class GroupCoordinatorServiceTest {
             ArgumentMatchers.eq(Duration.ofMillis(5000)),
             ArgumentMatchers.any(),
             ArgumentMatchers.any()
-        )).thenReturn(FutureUtils.failedFuture(new CompletionException(Errors.NOT_ENOUGH_REPLICAS.exception())));
+        )).thenReturn(FutureUtils.failedFuture(new CompletionException(error.exception())));
 
         CompletableFuture<TxnOffsetCommitResponseData> future = service.commitTransactionalOffsets(
             requestContext(ApiKeys.TXN_OFFSET_COMMIT),
